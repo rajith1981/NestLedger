@@ -89,13 +89,15 @@ export const SettingsView: React.FC = () => {
       goals
     };
 
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(backupData, null, 2))}`;
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', jsonString);
-    downloadAnchor.setAttribute('download', `statements_backup_${new Date().toISOString().split('T')[0]}.json`);
+    downloadAnchor.setAttribute('href', url);
+    downloadAnchor.setAttribute('download', `nestledger_backup_${new Date().toISOString().split('T')[0]}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const [isImporting, setIsImporting] = useState<boolean>(false);
@@ -113,7 +115,7 @@ export const SettingsView: React.FC = () => {
     try {
       const text = await file.text();
       const backupObj = JSON.parse(text);
-      await (window as any).importBackupDataDirect?.(backupObj) || importBackupData(backupObj);
+      await importBackupData(backupObj);
       setImportSuccess(`Successfully restored backup from "${file.name}"!`);
       setTimeout(() => setImportSuccess(null), 4000);
     } catch (err: any) {

@@ -71,11 +71,7 @@ export function detectCardName(
   // 4. Citi Simplicity Card
   if (
     combinedStr.includes('simplicity') ||
-    stmt.accountLast4 === '0873' ||
-    combinedStr.includes('0873') ||
-    txTexts.includes('866-696-5673') ||
-    txTexts.includes('SUMMIT CNTY *UTILITY') ||
-    txTexts.includes("HEINEN'S GROCERY")
+    txTexts.includes('SIMPLICITY')
   ) {
     return {
       cardName: 'Citi Simplicity',
@@ -87,12 +83,9 @@ export function detectCardName(
   // 5. Citi Strata Card
   if (
     combinedStr.includes('strata') ||
-    stmt.accountLast4 === '2289' ||
-    combinedStr.includes('2289') ||
-    txTexts.includes('THANKYOU') ||
-    txTexts.includes('MOONPRENEUR') ||
-    txTexts.includes('ZAIQA INDIAN') ||
-    txTexts.includes('SOMA INTIMATE')
+    txTexts.includes('STRATA') ||
+    txTexts.includes('THANKYOU PREFERRED') ||
+    txTexts.includes('THANKYOU POINTS')
   ) {
     return {
       cardName: 'Citi Strata',
@@ -106,7 +99,7 @@ export function detectCardName(
     combinedStr.includes('citi') ||
     txTexts.includes('CITI') ||
     txTexts.includes('CITIBANK') ||
-    txTexts.includes('ONLINE PAYMENT, THANK YOU')
+    txTexts.includes('CITICARDS')
   ) {
     if (combinedStr.includes('double cash') || txTexts.includes('DOUBLE CASH')) {
       return { cardName: 'Citi Double Cash', issuer: 'Citi', color: '#0284c7' };
@@ -114,14 +107,8 @@ export function detectCardName(
     if (combinedStr.includes('custom cash') || txTexts.includes('CUSTOM CASH')) {
       return { cardName: 'Citi Custom Cash', issuer: 'Citi', color: '#0284c7' };
     }
-    if (stmt.accountLast4 === '0873') {
-      return { cardName: 'Citi Simplicity', issuer: 'Citi', color: '#06b6d4' };
-    }
-    if (stmt.accountLast4 === '2289') {
-      return { cardName: 'Citi Strata', issuer: 'Citi', color: '#0284c7' };
-    }
     return {
-      cardName: 'Citi Strata',
+      cardName: 'Citi Credit Card',
       issuer: 'Citi',
       color: '#0284c7'
     };

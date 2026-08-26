@@ -13,6 +13,7 @@ import { detectFeeType } from './csvParser';
 import { matchCategory } from '../db/repository';
 import { DEFAULT_CATEGORY_RULES } from '../db/seedData';
 import { reconcileStatementSummary } from './reconciliation';
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 export interface ExtractedSummary {
   previousBalance: number;
@@ -35,134 +36,35 @@ export function isPaymentOrCreditDesc(desc: string | null | undefined): boolean 
   if (!desc) return false;
   const upper = desc.toUpperCase().trim();
 
-  // Exclude actual household/living expense phrases that happen to have "payment" in them
-  if (
-    upper.includes('MORTGAGE') ||
-    upper.includes('RENT') ||
-    upper.includes('TUITION') ||
-    upper.includes('KARATE') ||
-    upper.includes('INSURANCE') ||
-    upper.includes('UTILITY') ||
-    upper.includes('WATER') ||
-    upper.includes('ELECTRIC') ||
-    upper.includes('GAS') ||
-    upper.includes('INTERNET') ||
-    upper.includes('PHONE') ||
-    upper.includes('CAR PAYMENT') ||
-    upper.includes('AUTO LOAN') ||
-    upper.includes('LOAN PAYMENT')
-  ) {
-    return false;
-  }
-
   // Exclude fees that mention payment (e.g. "LATE PAYMENT FEE", "RETURNED PAYMENT FEE")
-  if (
-    upper.includes('LATE') ||
-    upper.includes('RETURNED') ||
-    upper.includes('OVERLIMIT') ||
-    upper.includes('INTEREST CHARGE') ||
-    upper.includes('FINANCE CHARGE') ||
-    (upper.includes('FEE') && !upper.includes('COFFEE'))
-  ) {
+  if (/\b(?:LATE FEE|RETURNED PAYMENT|OVERLIMIT|INTEREST CHARGE|FINANCE CHARGE|ANNUAL FEE)\b/i.test(upper)) {
     return false;
   }
 
-  const explicitPaymentPhrases = [
-    'AUTOMATIC PAYMENT',
-    'ONLINE PAYMENT',
-    'AUTOPAY',
-    'AUTO-PAY',
-    'AUTO PAYMENT',
-    'AUTO-PAYMENT',
-    'AUTOPAYMENT',
-    'DIRECTPAY',
-    'DIRECT-PAY',
-    'DIRECT PAY',
-    'DIRECT DEBIT',
-    'PAYMENT - THANK YOU',
-    'PAYMENT THANK YOU',
-    'PAYMENT RECEIVED',
-    'RECEIVED PAYMENT',
-    'THANK YOU',
-    'THANKYOU',
-    'MOBILE PAYMENT',
-    'ELECTRONIC PAYMENT',
-    'EPAY',
-    'EPAYMENT',
-    'E-PAYMENT',
-    'WEB PAYMENT',
-    'ACH PAYMENT',
-    'ACH WITHDRAWAL',
-    'ACH DEPOSIT',
-    'CITI AUTOPAY',
-    'CITICARDS AUTOPAY',
-    'CITI PAYMENT',
-    'AMEX EPAYMENT',
-    'AMEX PAYMENT',
-    'AMERICAN EXPRESS PAYMENT',
-    'CHASE EPAY',
-    'CHASE PAYMENT',
-    'CAPITAL ONE PAYMENT',
-    'DISCOVER PAYMENT',
-    'DISCOVER EPAY',
-    'STATEMENT CREDIT',
-    'ANNUAL FEE CREDIT',
-    'CASHBACK BONUS',
-    'CASHBACK BONUS REDEMPTION',
-    'CASHBACK BONUS CREDIT',
-    'CASHBACK CREDIT',
-    'REWARDS REDEMPTION',
-    'REWARD REDEMPTION',
-    'MERCHANDISE CREDIT',
-    'PROMOTIONAL CREDIT',
-    'CREDIT ADJUSTMENT',
-    'ACCOUNT CREDIT',
-    'REFUND / ADJUSTMENT',
-    'INTERNET PAYMENT',
-    'PAYMENTS AND CREDITS',
-    'PAYMENTS & CREDITS',
-    'PAYMENT/CREDIT',
-    'PAYMENT APPLIED',
-    'PMT THANK YOU',
-    'PMT RECEIVED',
-    'ONLINE PMT',
-    'PAYMENT - WEB',
-    'PAYMENT - MOBILE',
-    'CHECK PAYMENT',
-    'PAYMENT SENT',
-    'CREDIT - THANK YOU'
+  // Strong explicit payment markers
+  const explicitPaymentRegexes = [
+    /\b(?:AUTOMATIC PAYMENT|ONLINE PAYMENT|AUTOPAY|AUTO-PAY|AUTO PAYMENT|AUTO-PAYMENT|AUTOPAYMENT)\b/i,
+    /\b(?:DIRECTPAY|DIRECT-PAY|DIRECT PAY|DIRECT DEBIT|ACH PAYMENT|ACH WITHDRAWAL|ACH DEPOSIT)\b/i,
+    /\b(?:CITI AUTOPAY|CITICARDS AUTOPAY|CITI PAYMENT|AMEX EPAYMENT|AMEX PAYMENT|AMERICAN EXPRESS PAYMENT)\b/i,
+    /\b(?:CHASE EPAY|CHASE PAYMENT|CAPITAL ONE PAYMENT|DISCOVER PAYMENT|DISCOVER EPAY)\b/i,
+    /\b(?:STATEMENT CREDIT|ANNUAL FEE CREDIT|CASHBACK BONUS|CASHBACK BONUS REDEMPTION|CASHBACK BONUS CREDIT|CASHBACK CREDIT)\b/i,
+    /\b(?:REWARDS REDEMPTION|REWARD REDEMPTION|MERCHANDISE CREDIT|PROMOTIONAL CREDIT|CREDIT ADJUSTMENT|ACCOUNT CREDIT)\b/i,
+    /\b(?:REFUND \/ ADJUSTMENT|INTERNET PAYMENT|PAYMENTS AND CREDITS|PAYMENTS & CREDITS|PAYMENT\/CREDIT|PAYMENT APPLIED)\b/i,
+    /\b(?:PMT THANK YOU|PMT RECEIVED|ONLINE PMT|PAYMENT - WEB|PAYMENT - MOBILE|CHECK PAYMENT|PAYMENT SENT|CREDIT - THANK YOU)\b/i,
+    /\b(?:PAYMENT\s*[-–,]\s*THANK\s*YOU|PAYMENT\s+THANK\s*YOU|THANK\s*YOU\s+FOR\s+(?:YOUR\s+)?PAYMENT|PAYMENT\s+RECEIVED|RECEIVED\s+PAYMENT)\b/i,
+    /^(?:ONLINE\s+)?PAYMENT,?\s*THANK\s*YOU$/i,
+    /^THANK\s*YOU$/i
   ];
 
-  for (const phrase of explicitPaymentPhrases) {
-    if (upper.includes(phrase)) {
+  for (const re of explicitPaymentRegexes) {
+    if (re.test(upper)) {
       return true;
     }
   }
 
-  if (/\b(?:AUTOPAY|DIRECTPAY|EPAYMENT|AUTOPAYMENT|DIRECTPAYMENT)\b/i.test(upper) && !upper.includes('FEE')) {
-    return true;
-  }
-
-  if (
-    /\b(?:PAYMENT|PMT)\b/i.test(upper) &&
-    (upper.includes('THANK') ||
-      upper.includes('ONLINE') ||
-      upper.includes('AUTO') ||
-      upper.includes('CREDIT') ||
-      upper.includes('DIRECT') ||
-      upper.includes('CHECK') ||
-      upper.includes('RECEIVED') ||
-      upper.includes('MOBILE') ||
-      upper.includes('WEB') ||
-      upper.includes('ELECTRONIC') ||
-      upper.includes('CARD') ||
-      upper.includes('ACH'))
-  ) {
-    return true;
-  }
-
-  if (upper.startsWith('PAYMENT') || upper.startsWith('PMT ') || upper.startsWith('THANK YOU') || upper.endsWith('THANK YOU')) {
-    return true;
+  // Exclude actual household/living expense phrases with strict word boundaries
+  if (/\b(?:MORTGAGE|TUITION|KARATE|INSURANCE|UTILITY|UTILITIES|ELECTRIC|GAS BILL|WATER BILL|POWER BILL|INTERNET BILL|PHONE BILL|CAR PAYMENT|AUTO LOAN|LOAN PAYMENT)\b/i.test(upper)) {
+    return false;
   }
 
   return false;
@@ -358,8 +260,8 @@ export function extractSummaryBlock(fullText: string, fileName?: string): Extrac
   // Extract card / product name
   let cardName: string | undefined = undefined;
   if (/Discover/i.test(fullText) || (fileName && /Discover/i.test(fileName))) cardName = 'Discover Card';
-  else if (/Citi Simplicity|Simplicity/i.test(fullText) || (fileName && /Simplicity/i.test(fileName)) || (accountLast4 === '0873')) cardName = 'Citi Simplicity';
-  else if (/Citi Strata|Strata/i.test(fullText) || (fileName && /Strata/i.test(fileName)) || (accountLast4 === '2289')) cardName = 'Citi Strata';
+  else if (/Citi Simplicity|Simplicity/i.test(fullText) || (fileName && /Simplicity/i.test(fileName))) cardName = 'Citi Simplicity';
+  else if (/Citi Strata|Strata/i.test(fullText) || (fileName && /Strata/i.test(fileName))) cardName = 'Citi Strata';
   else if (/Costco/i.test(fullText) || (fileName && /Costco/i.test(fileName))) cardName = 'Citi Costco Anywhere';
   else if (/Sapphire/i.test(fullText) || (fileName && /Sapphire/i.test(fileName))) cardName = 'Chase Sapphire Preferred';
   else if (/Freedom/i.test(fullText) || (fileName && /Freedom/i.test(fileName))) cardName = 'Chase Freedom';
@@ -689,7 +591,7 @@ export async function extractTextFromPdf(pdfBuffer: ArrayBuffer): Promise<string
   const pdfjsLib = await import('pdfjs-dist');
 
   if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
   }
 
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfBuffer) });

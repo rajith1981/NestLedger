@@ -28,6 +28,21 @@ function isValidYear(year: number): boolean {
 }
 
 /**
+ * Validate that a year, month, day combination actually exists on the calendar (e.g. leap year Feb 29, 30 vs 31 days)
+ */
+export function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (!isValidYear(year) || month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return (
+    d.getUTCFullYear() === year &&
+    d.getUTCMonth() === month - 1 &&
+    d.getUTCDate() === day
+  );
+}
+
+/**
  * Format Date into YYYY-MM-DD
  */
 export function formatDateISO(year: number, month: number, day: number): string {
@@ -59,7 +74,7 @@ export function parseDateStrict(dateStr: string | null | undefined): string | nu
     const year = parseInt(isoMatch[1], 10);
     const month = parseInt(isoMatch[2], 10);
     const day = parseInt(isoMatch[3], 10);
-    if (isValidYear(year) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    if (isValidCalendarDate(year, month, day)) {
       return formatDateISO(year, month, day);
     }
   }
@@ -70,7 +85,7 @@ export function parseDateStrict(dateStr: string | null | undefined): string | nu
     const month = parseInt(usFullMatch[1], 10);
     const day = parseInt(usFullMatch[2], 10);
     const year = parseInt(usFullMatch[3], 10);
-    if (isValidYear(year) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    if (isValidCalendarDate(year, month, day)) {
       return formatDateISO(year, month, day);
     }
   }
@@ -81,7 +96,7 @@ export function parseDateStrict(dateStr: string | null | undefined): string | nu
     const month = parseInt(usTwoMatch[1], 10);
     const day = parseInt(usTwoMatch[2], 10);
     const year = normalizeTwoDigitYear(parseInt(usTwoMatch[3], 10));
-    if (isValidYear(year) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    if (isValidCalendarDate(year, month, day)) {
       return formatDateISO(year, month, day);
     }
   }
@@ -94,7 +109,7 @@ export function parseDateStrict(dateStr: string | null | undefined): string | nu
     const day = parseInt(namedMatch1[2], 10);
     let year = parseInt(namedMatch1[3], 10);
     if (year < 100) year = normalizeTwoDigitYear(year);
-    if (month && isValidYear(year) && day >= 1 && day <= 31) {
+    if (month && isValidCalendarDate(year, month, day)) {
       return formatDateISO(year, month, day);
     }
   }
@@ -106,7 +121,7 @@ export function parseDateStrict(dateStr: string | null | undefined): string | nu
     const month = MONTH_NAMES[monthKey];
     let year = parseInt(namedMatch2[3], 10);
     if (year < 100) year = normalizeTwoDigitYear(year);
-    if (month && isValidYear(year) && day >= 1 && day <= 31) {
+    if (month && isValidCalendarDate(year, month, day)) {
       return formatDateISO(year, month, day);
     }
   }
@@ -120,7 +135,7 @@ export function parseDateStrict(dateStr: string | null | undefined): string | nu
 export function inferYearForTransaction(
   monthDayStr: string,
   periodEndISO: string,
-  periodStartISO?: string
+  _periodStartISO?: string
 ): string | null {
   const clean = monthDayStr.trim().replace(/,\s*$/, '');
 
@@ -163,6 +178,10 @@ export function inferYearForTransaction(
     finalYear = periodEndYear - 1;
   }
 
+  if (!isValidCalendarDate(finalYear, month, day)) {
+    return null;
+  }
+
   return formatDateISO(finalYear, month, day);
 }
 
@@ -175,19 +194,34 @@ export function extractDateFromFileName(fileName: string): string | null {
   // 1. YYYYMMDD e.g. Discover-AccountActivity-20260720.pdf
   const yyyymmdd = fileName.match(/(?:^|[^0-9])(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?:[^0-9]|$)/);
   if (yyyymmdd) {
-    return `${yyyymmdd[1]}-${yyyymmdd[2]}-${yyyymmdd[3]}`;
+    const y = parseInt(yyyymmdd[1], 10);
+    const m = parseInt(yyyymmdd[2], 10);
+    const d = parseInt(yyyymmdd[3], 10);
+    if (isValidCalendarDate(y, m, d)) {
+      return `${yyyymmdd[1]}-${yyyymmdd[2]}-${yyyymmdd[3]}`;
+    }
   }
 
   // 2. YYYY-MM-DD or YYYY_MM_DD
   const iso = fileName.match(/(?:^|[^0-9])(20\d{2})[-_](0[1-9]|1[0-2])[-_](0[1-9]|[12]\d|3[01])(?:[^0-9]|$)/);
   if (iso) {
-    return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const y = parseInt(iso[1], 10);
+    const m = parseInt(iso[2], 10);
+    const d = parseInt(iso[3], 10);
+    if (isValidCalendarDate(y, m, d)) {
+      return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    }
   }
 
   // 3. MM-DD-YYYY or MM_DD_YYYY
   const us = fileName.match(/(?:^|[^0-9])(0[1-9]|1[0-2])[-_](0[1-9]|[12]\d|3[01])[-_](20\d{2})(?:[^0-9]|$)/);
   if (us) {
-    return `${us[3]}-${us[1]}-${us[2]}`;
+    const y = parseInt(us[3], 10);
+    const m = parseInt(us[1], 10);
+    const d = parseInt(us[2], 10);
+    if (isValidCalendarDate(y, m, d)) {
+      return `${us[3]}-${us[1]}-${us[2]}`;
+    }
   }
 
   // 4. "January 19" or "Jan 19"
@@ -198,7 +232,7 @@ export function extractDateFromFileName(fileName: string): string | null {
     const day = parseInt(named[2], 10);
     let year = named[3] ? parseInt(named[3], 10) : new Date().getFullYear();
     if (year < 100) year = normalizeTwoDigitYear(year);
-    if (month && isValidYear(year) && day >= 1 && day <= 31) {
+    if (month && isValidCalendarDate(year, month, day)) {
       return formatDateISO(year, month, day);
     }
   }

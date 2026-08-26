@@ -12,12 +12,30 @@ import { isStatementDuplicate } from '../engine/reconciliation';
 import { detectCardName } from '../engine/cardDetector';
 
 /**
- * SHA-256 file hashing via Web Crypto API
+ * SHA-256 file hashing via Web Crypto API with fallback for non-secure contexts (LAN http)
  */
 export async function computeSourceHash(buffer: ArrayBuffer): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  if (typeof crypto !== 'undefined' && crypto?.subtle?.digest) {
+    try {
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      // Fall through to fallback hash
+    }
+  }
+
+  // Non-secure LAN fallback hash (FNV-1a 64-bit hex hash over ArrayBuffer)
+  const bytes = new Uint8Array(buffer);
+  let h1 = 0x811c9dc5;
+  let h2 = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) {
+    h1 = Math.imul(h1 ^ bytes[i], 0x01000193);
+    h2 = Math.imul(h2 ^ (bytes[i] << 1), 0x01000193);
+  }
+  const part1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const part2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return `fallback_${part1}${part2}_${bytes.length}`;
 }
 
 /**
@@ -26,13 +44,6 @@ export async function computeSourceHash(buffer: ArrayBuffer): Promise<string> {
 export function matchCategory(rawDesc: string, rules: CategoryRule[], amountCents?: number): string {
   if (amountCents !== undefined && amountCents < 0) {
     return 'cat_payments';
-  }
-  // If description is explicitly housing / living expense, prioritize housing
-  if (/\b(?:MORTGAGE|RENT|HOA|HOUSING)\b/i.test(rawDesc)) {
-    return 'cat_housing';
-  }
-  if (/\b(?:TUITION|KARATE|MARTIAL ARTS|SWIM|ROBOTICS|KUMON)\b/i.test(rawDesc)) {
-    return 'cat_education';
   }
   if (isPaymentOrCreditDesc(rawDesc)) {
     return 'cat_payments';
@@ -91,49 +102,44 @@ export async function getStatementByHash(sourceHash: string): Promise<Statement 
   });
 }
 
+/**
+ * Pure transaction normalizer applied at write time
+ */
+export function normalizeTransaction(t: Transaction): Transaction {
+  const isStatementTx = Boolean(t.statementId && t.statementId !== 'manual_checking' && !t.isManual);
+  if (isStatementTx) {
+    const isPayment = isPaymentOrCreditDesc(t.rawDescription) || t.type === 'PAYMENT' || t.amountCents < 0;
+    return {
+      ...t,
+      accountType: 'CREDIT',
+      isManual: false,
+      amountCents: isPayment ? -Math.abs(t.amountCents) : Math.abs(t.amountCents),
+      type: isPayment ? 'PAYMENT' : (t.type === 'PAYMENT' ? 'DEBIT' : t.type),
+      categoryId: isPayment ? 'cat_payments' : t.categoryId
+    };
+  } else {
+    // Checking or manual expenses are positive debits
+    const isCheckingPayment = t.categoryId === 'cat_payments';
+    return {
+      ...t,
+      accountType: 'CHECKING',
+      isManual: true,
+      amountCents: Math.abs(t.amountCents),
+      type: 'DEBIT',
+      categoryId: isCheckingPayment ? 'cat_housing' : t.categoryId
+    };
+  }
+}
+
 export async function getTransactionsByStatement(statementId: string): Promise<Transaction[]> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('transactions', 'readwrite');
+    const tx = db.transaction('transactions', 'readonly');
     const store = tx.objectStore('transactions');
     const index = store.index('statementId');
     const req = index.getAll(statementId);
     req.onsuccess = () => {
       const results: Transaction[] = req.result || [];
-      for (const t of results) {
-        const isStatementTx = t.statementId && t.statementId !== 'manual_checking' && !t.isManual;
-
-        if (isStatementTx) {
-          if (t.accountType === 'CHECKING' || t.accountId === 'acc_checking') {
-            t.accountType = 'CREDIT';
-            t.isManual = false;
-            store.put(t);
-          }
-          if (isPaymentOrCreditDesc(t.rawDescription) && (t.amountCents > 0 || t.type !== 'PAYMENT')) {
-            t.amountCents = -Math.abs(t.amountCents);
-            t.type = 'PAYMENT';
-            store.put(t);
-          }
-        } else {
-          const isChecking =
-            t.isManual ||
-            t.accountType === 'CHECKING' ||
-            t.statementId === 'manual_checking' ||
-            t.accountId === 'acc_checking';
-
-          if (isChecking) {
-            // Manual checking expenses are always positive debits
-            if (t.amountCents < 0 || t.type !== 'DEBIT') {
-              t.amountCents = Math.abs(t.amountCents);
-              t.type = 'DEBIT';
-              if (t.categoryId === 'cat_payments') {
-                t.categoryId = 'cat_housing';
-              }
-              store.put(t);
-            }
-          }
-        }
-      }
       results.sort((a, b) => b.date.localeCompare(a.date));
       resolve(results);
     };
@@ -144,45 +150,11 @@ export async function getTransactionsByStatement(statementId: string): Promise<T
 export async function getAllTransactions(): Promise<Transaction[]> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('transactions', 'readwrite');
+    const tx = db.transaction('transactions', 'readonly');
     const store = tx.objectStore('transactions');
     const req = store.getAll();
     req.onsuccess = () => {
       const results: Transaction[] = req.result || [];
-      for (const t of results) {
-        const isStatementTx = t.statementId && t.statementId !== 'manual_checking' && !t.isManual;
-
-        if (isStatementTx) {
-          if (t.accountType === 'CHECKING' || t.accountId === 'acc_checking') {
-            t.accountType = 'CREDIT';
-            t.isManual = false;
-            store.put(t);
-          }
-          if (isPaymentOrCreditDesc(t.rawDescription) && (t.amountCents > 0 || t.type !== 'PAYMENT')) {
-            t.amountCents = -Math.abs(t.amountCents);
-            t.type = 'PAYMENT';
-            store.put(t);
-          }
-        } else {
-          const isChecking =
-            t.isManual ||
-            t.accountType === 'CHECKING' ||
-            t.statementId === 'manual_checking' ||
-            t.accountId === 'acc_checking';
-
-          if (isChecking) {
-            // Manual checking expenses are always positive debits
-            if (t.amountCents < 0 || t.type !== 'DEBIT') {
-              t.amountCents = Math.abs(t.amountCents);
-              t.type = 'DEBIT';
-              if (t.categoryId === 'cat_payments') {
-                t.categoryId = 'cat_housing';
-              }
-              store.put(t);
-            }
-          }
-        }
-      }
       results.sort((a, b) => b.date.localeCompare(a.date));
       resolve(results);
     };
@@ -331,7 +303,7 @@ export async function importStatementAndTransactions(
     stmtStore.put(fullStatement);
 
     for (const txItem of fullTransactions) {
-      txStore.put(txItem);
+      txStore.put(normalizeTransaction(txItem));
     }
 
     tx.oncomplete = () => {
@@ -370,6 +342,7 @@ export async function recategorizeAllTransactions(rules?: CategoryRule[]): Promi
     const tx = db.transaction(['category_rules', 'transactions'], 'readwrite');
     const rulesStore = tx.objectStore('category_rules');
     const txStore = tx.objectStore('transactions');
+    let updatedCount = 0;
 
     const rulesReq = rulesStore.getAll();
     rulesReq.onsuccess = () => {
@@ -377,7 +350,6 @@ export async function recategorizeAllTransactions(rules?: CategoryRule[]): Promi
       const txReq = txStore.getAll();
       txReq.onsuccess = () => {
         const allTx: Transaction[] = txReq.result || [];
-        let updatedCount = 0;
         for (const t of allTx) {
           if (t.isManual || t.accountType === 'CHECKING' || t.accountId === 'acc_checking') {
             continue;
@@ -408,7 +380,7 @@ export async function recategorizeAllTransactions(rules?: CategoryRule[]): Promi
       };
     };
 
-    tx.oncomplete = () => resolve(0);
+    tx.oncomplete = () => resolve(updatedCount);
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -423,10 +395,10 @@ export async function applyCategoryToMatchingTransactions(
     const store = tx.objectStore('transactions');
     const allReq = store.getAll();
     const upperPattern = pattern.trim().toUpperCase();
+    let count = 0;
 
     allReq.onsuccess = () => {
       const list: Transaction[] = allReq.result || [];
-      let count = 0;
       for (const t of list) {
         if (t.isManual || t.accountType === 'CHECKING' || t.accountId === 'acc_checking') {
           continue;
@@ -452,7 +424,7 @@ export async function applyCategoryToMatchingTransactions(
       }
     };
 
-    tx.oncomplete = () => resolve(0);
+    tx.oncomplete = () => resolve(count);
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -609,6 +581,7 @@ export async function saveAccount(account: Account): Promise<void> {
 }
 
 export async function saveManualTransaction(txData: Transaction): Promise<void> {
+  const normalized = normalizeTransaction(txData);
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['transactions', 'accounts'], 'readwrite');
@@ -629,7 +602,7 @@ export async function saveManualTransaction(txData: Transaction): Promise<void> 
       }
     };
 
-    txStore.put(txData);
+    txStore.put(normalized);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -686,7 +659,7 @@ export async function wipeAllLocalData(): Promise<void> {
 }
 
 /**
- * Restore complete JSON backup into IndexedDB
+ * Restore complete JSON backup into IndexedDB with strict schema validation
  */
 export async function restoreBackupData(data: {
   statements?: Statement[];
@@ -696,6 +669,46 @@ export async function restoreBackupData(data: {
   rules?: CategoryRule[];
   goals?: Goal[];
 }): Promise<void> {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid backup file format: Root must be a valid JSON object.');
+  }
+
+  // 1. Validate statements shape
+  if (data.statements) {
+    if (!Array.isArray(data.statements)) {
+      throw new Error('Invalid backup: "statements" must be an array.');
+    }
+    for (const s of data.statements) {
+      if (!s.id || !s.periodEnd || typeof s.newBalance !== 'number') {
+        throw new Error(`Invalid statement record in backup: Statement "${s.id || 'unknown'}" is missing required fields.`);
+      }
+    }
+  }
+
+  // 2. Validate transactions shape
+  if (data.transactions) {
+    if (!Array.isArray(data.transactions)) {
+      throw new Error('Invalid backup: "transactions" must be an array.');
+    }
+    for (const t of data.transactions) {
+      if (!t.id || !t.date || typeof t.amountCents !== 'number' || typeof t.rawDescription !== 'string') {
+        throw new Error(`Invalid transaction record in backup: Transaction "${t.id || 'unknown'}" is missing required fields.`);
+      }
+    }
+  }
+
+  // 3. Validate accounts shape
+  if (data.accounts) {
+    if (!Array.isArray(data.accounts)) {
+      throw new Error('Invalid backup: "accounts" must be an array.');
+    }
+    for (const a of data.accounts) {
+      if (!a.id || !a.name) {
+        throw new Error(`Invalid account record in backup: Account "${a.id || 'unknown'}" is missing required fields.`);
+      }
+    }
+  }
+
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(
@@ -713,7 +726,7 @@ export async function restoreBackupData(data: {
     if (data.transactions && Array.isArray(data.transactions)) {
       const txStore = tx.objectStore('transactions');
       for (const t of data.transactions) {
-        txStore.put(t);
+        txStore.put(normalizeTransaction(t));
       }
     }
 

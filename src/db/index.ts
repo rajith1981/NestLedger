@@ -1,7 +1,7 @@
 /**
  * SPEC 6 — Database Persistence & Idempotent Seeding
  * 
- * Client-side IndexedDB database engine for 100% offline persistence.
+ * Client-side IndexedDB database engine for 100% offline persistence with connection memoization.
  */
 
 import { Category, CategoryRule } from '../types/statement';
@@ -17,7 +17,26 @@ import {
 const DB_NAME = 'StatementsDB';
 const DB_VERSION = 1;
 
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+/**
+ * Open or return memoized IndexedDB database connection instance
+ */
 export function openDatabase(): Promise<IDBDatabase> {
+  if (!dbPromise) {
+    dbPromise = reallyOpenDatabase().catch(err => {
+      dbPromise = null;
+      throw err;
+    });
+  }
+  return dbPromise;
+}
+
+export function resetDatabaseConnection(): void {
+  dbPromise = null;
+}
+
+function reallyOpenDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -66,9 +85,17 @@ export function openDatabase(): Promise<IDBDatabase> {
 
     request.onsuccess = async () => {
       const db = request.result;
-      // Perform idempotent seed check
-      await ensureSeedData(db);
-      resolve(db);
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      // Perform idempotent seed check on initial open
+      try {
+        await ensureSeedData(db);
+        resolve(db);
+      } catch (err) {
+        resolve(db);
+      }
     };
 
     request.onerror = () => {

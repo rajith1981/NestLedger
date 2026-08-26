@@ -104,14 +104,14 @@ describe('SPEC 4: Merchant Descriptor Normalization', () => {
   });
 
   it('extracts distinct merchant signatures for auto-learning (Costco Gas vs Whse vs Online)', () => {
-    expect(extractMerchantSignature('COSTCO GAS #1226 HUDSON OH')).toBe('COSTCO GAS');
-    expect(extractMerchantSignature('COSTCO WHSE #1226 HUDSON OH')).toBe('COSTCO WHSE');
+    expect(extractMerchantSignature('COSTCO GAS #1226 AUSTIN TX')).toBe('COSTCO GAS');
+    expect(extractMerchantSignature('COSTCO WHSE #1226 AUSTIN TX')).toBe('COSTCO WHSE');
     expect(extractMerchantSignature('WWW COSTCO COM 800-955-2292 WA')).toBe('COSTCO COM');
   });
 
   it('accurately categorizes sub-brands and user learned rules', () => {
-    expect(matchCategory('COSTCO GAS #1226 HUDSON OH', DEFAULT_CATEGORY_RULES)).toBe('cat_transport');
-    expect(matchCategory('COSTCO WHSE #1226 HUDSON OH', DEFAULT_CATEGORY_RULES)).toBe('cat_groceries');
+    expect(matchCategory('COSTCO GAS #1226 AUSTIN TX', DEFAULT_CATEGORY_RULES)).toBe('cat_transport');
+    expect(matchCategory('COSTCO WHSE #1226 AUSTIN TX', DEFAULT_CATEGORY_RULES)).toBe('cat_groceries');
     expect(matchCategory('WWW COSTCO COM 800-955-2292 WA', DEFAULT_CATEGORY_RULES)).toBe('cat_shopping');
 
     // Test high priority user learned rule override
@@ -222,7 +222,7 @@ New balance $920.26
   it('accurately parses full Citi Strata statement with standard purchases and returns', () => {
     const strataText = `
 Citi Strata Card
-Member Since 2014 Account number ending in: 2289 
+Member Since 2014 Account number ending in: 9876 
 Billing Period: 02/19/26-03/18/26
 
 MARCH STATEMENT
@@ -244,18 +244,18 @@ Account Summary
 Trans. date Post date Description Amount
 Payments, Credits and Adjustments 
 03/08 ONLINE PAYMENT, THANK YOU -$390.02
-02/19 02/19 NORDSTROM RACK #2261 MACEDONIA OH -$31.00
+02/19 02/19 NORDSTROM RACK #2261 CHICAGO IL -$31.00
 
 Standard Purchases
 02/24 02/24 GOOGLE *Ninja Kiwi MOUNTAIN VIEW CA $7.55
 02/25 02/25 GOOGLE *Google One MOUNTAIN VIEW CA $0.81
 02/28 02/28 HP *INSTANT INK PALO ALTO CA $5.86
 03/02 03/02 NETFLIX.COM LOS GATOS CA $8.53
-03/05 03/05 MARSHALLS #868 BAINBRIDGE OH $26.68
-03/05 03/05 LEES AUTOMOTIVE TWINSBURG OH $3.19
+03/05 03/05 MARSHALLS #868 CHICAGO IL $26.68
+03/05 03/05 LEES AUTOMOTIVE AUSTIN TX $3.19
 03/11 03/11 MOONPRENEUR INC SAN JOSE CA $139.00
-03/12 03/12 CLOTHES MENTOR #155 CANTON OH $43.11
-03/12 03/12 DILLARDS 373 BELDEN VI CANTON OH $111.45
+03/12 03/12 CLOTHES MENTOR #155 DALLAS TX $43.11
+03/12 03/12 DILLARDS 373 BELDEN VI DALLAS TX $111.45
 `;
 
     const result = parseTextStatement(strataText, 'citi_strata.pdf', 'hash_strata');
@@ -287,7 +287,7 @@ Standard Purchases
   it('accurately parses June Citi Strata statement with purchases, return, and payment', () => {
     const juneStrataText = `
 Citi Strata Card
-Member Since 2014. Account number ending in: 2289
+Member Since 2014. Account number ending in: 9876
 Billing Period: 05/20/26-06/17/26
 
 JUNE STATEMENT
@@ -312,11 +312,11 @@ Payments, Credits and Adjustments
 06/15 06/15 SHAPERMINT 7025579792 NV -$37.71
 
 Standard Purchases
-05/20 05/20 SQ *ESSENTIALS Hudson OH $14.94
-05/21 05/21 CVS/PHARMACY #08932 TWINSBURG OH $4.31
+05/20 05/20 SQ *ESSENTIALS AUSTIN TX $14.94
+05/21 05/21 CVS/PHARMACY #08932 CHICAGO IL $4.31
 05/25 05/25 GOOGLE *Google One MOUNTAIN VIEW CA $3.23
 05/28 05/28 HP *INSTANT INK PALO ALTO CA $5.86
-05/28 05/28 TWILA'S TREASURES TWINSBURG OH $13.07
+05/28 05/28 BOUTIQUE SHOP DALLAS TX $13.07
 06/02 06/02 Netflix.com Los Gatos CA $9.60
 06/11 06/11 MOONPRENEUR INC SAN JOSE CA $139.00
 `;
@@ -326,7 +326,7 @@ Standard Purchases
     expect(result.statement.payments).toBe(105757); // 1019.86 + 37.71 = 1057.57
     expect(result.statement.purchases).toBe(19001); // 190.01
     expect(result.statement.newBalance).toBe(15230); // 152.30
-    expect(result.statement.accountLast4).toBe('2289');
+    expect(result.statement.accountLast4).toBe('9876');
     expect(result.statement.cardName).toBe('Citi Strata');
     expect(result.statement.isReconciled).toBe(true);
     expect(result.statement.discrepancy).toBe(0);
@@ -580,12 +580,47 @@ describe('SPEC 11: Subscription Cadence', () => {
       statementId: 's1',
       accountId: 'a1',
       date: '2026-01-11',
-      rawDescription: 'KARATE INSTITUTE LLC TWINSBURG OH',
+      rawDescription: 'KARATE INSTITUTE LLC AUSTIN TX',
       normalizedMerchant: 'Karate Institute',
       categoryId: 'cat_education',
       amountCents: 15000,
       type: 'DEBIT' as const
     };
     expect(isTrueSubscriptionTx(karateTx)).toBe(false);
+  });
+
+  it('correctly categorizes rental cars as transport and rent as housing (Review item 5)', () => {
+    expect(matchCategory('ENTERPRISE RENT-A-CAR AUSTIN TX', DEFAULT_CATEGORY_RULES)).toBe('cat_transport');
+    expect(matchCategory('HERTZ RENT A CAR CHICAGO IL', DEFAULT_CATEGORY_RULES)).toBe('cat_transport');
+    expect(matchCategory('BUDGET RENT A CAR NEW YORK NY', DEFAULT_CATEGORY_RULES)).toBe('cat_transport');
+    expect(matchCategory('AVIS CAR RENTAL BOSTON MA', DEFAULT_CATEGORY_RULES)).toBe('cat_transport');
+    expect(matchCategory('MONTHLY APARTMENT RENT PAYMENT', DEFAULT_CATEGORY_RULES)).toBe('cat_housing');
+    expect(matchCategory('MORTGAGE SERVICING LLC', DEFAULT_CATEGORY_RULES)).toBe('cat_housing');
+  });
+
+  it('accurately detects payments without substring collisions (Review item 6)', async () => {
+    const { isPaymentOrCreditDesc } = await import('../engine/pdfParser');
+    expect(isPaymentOrCreditDesc('AUTOPAY LAS VEGAS')).toBe(true);
+    expect(isPaymentOrCreditDesc('ONLINE PAYMENT RENTAL')).toBe(true);
+    expect(isPaymentOrCreditDesc('AUTOPAY PARENT PLUS')).toBe(true);
+    expect(isPaymentOrCreditDesc('ONLINE PAYMENT, THANK YOU')).toBe(true);
+    expect(isPaymentOrCreditDesc('AUTOMATIC PAYMENT - THANK YOU')).toBe(true);
+    expect(isPaymentOrCreditDesc('THANK YOU THAI KITCHEN')).toBe(false);
+    expect(isPaymentOrCreditDesc('TRADER JOES GROCERY')).toBe(false);
+  });
+
+  it('rejects invalid calendar dates including non-leap year Feb 29 (Review item 9)', () => {
+    expect(parseDateStrict('2026-02-29')).toBeNull(); // 2026 is not a leap year
+    expect(parseDateStrict('2024-02-29')).toBe('2024-02-29'); // 2024 is a leap year
+    expect(parseDateStrict('2026-04-31')).toBeNull(); // April has 30 days
+    expect(inferYearForTransaction('02/29', '2026-03-10')).toBeNull();
+    expect(inferYearForTransaction('04/31', '2026-05-10')).toBeNull();
+  });
+
+  it('handles numbers and scientific notation without corruption (Review item 10)', () => {
+    expect(parseAmountToCents(1e-7)).toBe(0);
+    expect(parseAmountToCents(0.01)).toBe(1);
+    expect(parseAmountToCents(12.34)).toBe(1234);
+    expect(parseAmountToCents(1500.50)).toBe(150050);
   });
 });

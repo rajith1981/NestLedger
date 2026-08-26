@@ -11,10 +11,9 @@ export function parseAmountToCents(amountStr: string | number | null | undefined
 
   if (typeof amountStr === 'number') {
     if (Number.isNaN(amountStr) || !Number.isFinite(amountStr)) return 0;
-    // If it's already an integer, check if it was intended as cents vs dollars.
-    // For safety, convert float number representation to string first:
-    const numStr = amountStr.toString();
-    return parseAmountToCents(numStr);
+    if (Math.abs(amountStr) > 1e15) return 0;
+    // Format to fixed 2 decimal string to avoid scientific notation parsing bugs (e.g. 1e-7)
+    return parseAmountToCents(amountStr.toFixed(2));
   }
 
   // 1. Clean string: trim, replace \u00A0 with standard spaces

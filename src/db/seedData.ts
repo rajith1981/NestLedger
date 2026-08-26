@@ -24,8 +24,8 @@ export const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
   { id: 'rule_15', categoryId: 'cat_payments', pattern: "AUTOMATIC PAYMENT|ONLINE PAYMENT|AUTOPAY|DIRECTPAY|PAYMENT - THANK YOU|PAYMENT THANK YOU|THANK YOU|REFUND|MERCHANDISE CREDIT|CREDIT ADJUSTMENT|CASHBACK", isRegex: true, priority: 30 },
   // Fees & interest (Priority 25)
   { id: 'rule_14', categoryId: 'cat_fees', pattern: "LATE FEE|ANNUAL FEE|FOREIGN TRANSACTION|INTEREST CHARGE|FINANCE CHARGE|OVERLIMIT|ATM FEE", isRegex: true, priority: 25 },
-  // Specialized Fuel Sub-brands (Priority 22)
-  { id: 'rule_fuel_sub', categoryId: 'cat_transport', pattern: "COSTCO GAS|COSTCO FUEL|SAMS CLUB GAS|SAM'S CLUB GAS|KROGER FUEL|HEB FUEL|WALMART GAS|WAL-MART GAS|SHELL|CHEVRON|EXXON|BP |MOBIL|SPEEDWAY|GAS STATION|GASOLINE|FUEL|LUBRIZOL|CAR WASH|OIL CHANGE|AUTO PARTS", isRegex: true, priority: 22 },
+  // Specialized Fuel & Car Rental Sub-brands (Priority 22)
+  { id: 'rule_fuel_sub', categoryId: 'cat_transport', pattern: "COSTCO GAS|COSTCO FUEL|SAMS CLUB GAS|SAM'S CLUB GAS|KROGER FUEL|HEB FUEL|WALMART GAS|WAL-MART GAS|SHELL|CHEVRON|EXXON|BP |MOBIL|SPEEDWAY|GAS STATION|GASOLINE|FUEL|LUBRIZOL|CAR WASH|OIL CHANGE|AUTO PARTS|ENTERPRISE RENT|HERTZ|AVIS|BUDGET RENT|NATIONAL CAR|ALAMO RENT|SIXT|CAR RENTAL|RENT-A-CAR|RENT A CAR", isRegex: true, priority: 22 },
   // Specialized Online & Retail Shopping (Priority 20)
   { id: 'rule_online_sub', categoryId: 'cat_shopping', pattern: "COSTCO\\.COM|WWW COSTCO COM|SAMSCLUB\\.COM|AMAZON|AMZN|TARGET|WALMART|WAL-MART|WAL MART|BEST BUY|APPLE STORE|NORDSTROM|ZARA|UNIQLO|HOME DEPOT|LOWES|IKEA|ETSY|EBAY|RETAIL|WHITE HOUSE|BLACK MARKET|TJ MAXX|T\\.J\\. MAXX|MARSHALLS|ROSS|KOHLS|MACYS|CLOTHING|OUTLET|BOUTIQUE|MALL", isRegex: true, priority: 20 },
   // Subscriptions & Streaming (Priority 18)
@@ -37,13 +37,13 @@ export const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
   // Dining & takeout (Priority 10)
   { id: 'rule_2', categoryId: 'cat_dining', pattern: "STARBUCKS|BLUE BOTTLE|CHIPOTLE|SWEETGREEN|MCDONALD|SHAKE SHACK|PANERA|DUNKIN|DOMINO|PIZZA|BURGER|COFFEE|DINER|BAR & GRILL|GRILL|TACOS|TACO|PANINI|BAGEL|SUSHI|NOODLE|BISTRO|BREW|TAVERN|BBQ|KITCHEN|DONUT|CATERING|RESTAURANT|CAFE|BAKERY|UBER EATS|DOORDASH|GRUBHUB", isRegex: true, priority: 10 },
   // Transport & fuel (Priority 10)
-  { id: 'rule_3', categoryId: 'cat_transport', pattern: "UBER|LYFT|TRANSIT|SUBWAY|METRO|PARKING|TOLL", isRegex: true, priority: 10 },
+  { id: 'rule_3', categoryId: 'cat_transport', pattern: "\\b(?:UBER|LYFT|TRANSIT|SUBWAY|METRO|PARKING|TOLL)\\b", isRegex: true, priority: 10 },
   // Travel (Priority 10)
   { id: 'rule_4', categoryId: 'cat_travel', pattern: "AIRBNB|HOTELS\\.COM|EXPEDIA|DELTA|UNITED AIRLINES|AMERICAN AIRLINES|SOUTHWEST|MARRIOTT|HILTON|HYATT|FLIGHT|AIRLINE|HOTEL|BOOKING\\.COM|RESORT|CRUISE", isRegex: true, priority: 10 },
   // Utilities & telecom (Priority 10)
   { id: 'rule_6', categoryId: 'cat_utilities', pattern: "AT&T|VERIZON|T-MOBILE|COMCAST|XFINITY|SPECTRUM|CONED|PG&E|FIRSTENERGY|FIRST ENERGY|UTILITY|UTILITIES|ELECTRIC|POWER|WATER|GAS BILL|SEWER|ENERGY|TELECOM|WIRELESS|INTERNET", isRegex: true, priority: 10 },
-  // Housing (Priority 10)
-  { id: 'rule_7', categoryId: 'cat_housing', pattern: "RENT|MORTGAGE|HOA |PROPERTY MANAGEMENT|STORAGE UNIT|HOME REPAIR", isRegex: true, priority: 10 },
+  // Housing (Priority 10) - strictly excluding car rentals
+  { id: 'rule_7', categoryId: 'cat_housing', pattern: "\\b(?:MORTGAGE|HOA|PROPERTY MANAGEMENT|STORAGE UNIT|HOME REPAIR)\\b|\\bRENT\\b(?![- ]A[- ]CAR|AL)", isRegex: true, priority: 10 },
   // Health & pharmacy (Priority 10)
   { id: 'rule_8', categoryId: 'cat_health', pattern: "CVS|WALGREENS|RITE AID|PHARMACY|DOCTOR|DENTAL|CLINIC|HEALTHCARE|HOSPITAL|LABCORP|QUEST DIAGNOSTICS|OPTOMETRY|VISION|MEDICINE|MEDICAL", isRegex: true, priority: 10 },
   // Insurance (Priority 10)
@@ -51,7 +51,7 @@ export const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
   // Personal care (Priority 10)
   { id: 'rule_12', categoryId: 'cat_personal_care', pattern: "SALON|BARBER|SPA|SEPHORA|ULTA|HAIRCUT|MASSAGE|EQUINOX|PLANET FITNESS|GYM", isRegex: true, priority: 10 },
   // Education (Priority 10)
-  { id: 'rule_13', categoryId: 'cat_education', pattern: "TUITION|COLLEGE|UNIVERSITY|COURSERA|UDEMY|TEXTBOOK|SCHOOL|KARATE|MARTIAL ARTS|TAEKWONDO|DOJO|ACADEMY|INSTITUTE|TUTOR|LESSONS|CLASS|INSTRUCTION|TRAINING", isRegex: true, priority: 10 }
+  { id: 'rule_13', categoryId: 'cat_education', pattern: "TUITION|COLLEGE|UNIVERSITY|COURSERA|UDEMY|TEXTBOOK|SCHOOL|KARATE|MARTIAL ARTS|TAEKWONDO|DOJO|ACADEMY|INSTITUTE|TUTOR|LESSONS|CLASS|INSTRUCTION|TRAINING|ROBOTICS|KUMON", isRegex: true, priority: 10 }
 ];
 
 export const DEMO_ACCOUNTS: Account[] = [
