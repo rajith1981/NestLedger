@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="nestGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="50%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#131b2e" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rect -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <rect width="510" height="510" x="1" y="1" rx="111" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2" />
+
+  <!-- Shield Vault Silhouette -->
+  <path d="M 256 90 L 390 145 C 390 280 256 385 256 422 C 256 385 122 280 122 145 Z" 
+        fill="url(#nestGrad)" 
+        opacity="0.15" 
+        filter="url(#glow)" />
+
+  <path d="M 256 100 L 380 152 C 380 270 256 368 256 405 C 256 368 132 270 132 152 Z" 
+        fill="none" 
+        stroke="url(#nestGrad)" 
+        stroke-width="12" 
+        stroke-linejoin="round" />
+
+  <!-- Credit Card / Nest Stack Graphic -->
+  <rect x="180" y="195" width="152" height="96" rx="14" fill="#131b2e" stroke="url(#nestGrad)" stroke-width="8" />
+  <line x1="180" y1="225" x2="332" y2="225" stroke="#06b6d4" stroke-width="6" opacity="0.6" />
+  <circle cx="215" cy="260" r="10" fill="#f59e0b" />
+  <circle cx="230" cy="260" r="10" fill="#ef4444" opacity="0.8" />
+
+  <!-- Checkmark / Growth Accent -->
+  <path d="M 220 325 L 246 350 L 305 290" fill="none" stroke="#10b981" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
