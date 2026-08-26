@@ -172,6 +172,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
   }, [allTransactions, selectedCardFilter, includeChecking, statementCardMap, accounts]);
 
   // Pure Credit Card Breakdown (excludes manual checking expenses)
+  // Pure Credit Card Breakdown (excludes manual checking expenses)
   const creditCardsBreakdown = useMemo(() => {
     if (!isAggregateView) return [];
 
@@ -189,7 +190,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
       }
     > = {};
 
-    // 1. Group from row transactions
+    // 1. Group from active row transactions in scope
     for (const tx of currentStatementTxs) {
       // Exclude manual checking bills
       if (isCheckingTx(tx)) {
@@ -231,122 +232,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
       }
     }
 
+    // 2. Add summary fallback ONLY for statements in scope that have NO individual transaction rows
     const statementsInScope = selectedStatementId.startsWith('MONTH:')
       ? statements.filter((s) => s.periodEnd && s.periodEnd.startsWith(selectedStatementId.replace('MONTH:', '')))
       : selectedStatementId.startsWith('YEAR:')
       ? statements.filter((s) => s.periodEnd && s.periodEnd.startsWith(selectedStatementId.replace('YEAR:', '')))
       : statements;
 
-    if (selectedStatementId.startsWith('YEAR:') || selectedStatementId === 'ALL') {
-      // 1. In Full Year / All Time view: Aggregate per statement for 100% statement-verified precision
-      for (const stmt of statementsInScope) {
-        const stmtTxs = allTransactions.filter((t) => t.statementId === stmt.id);
-        const detected = detectCardName(stmt, stmtTxs);
-        const cardName = detected.cardName;
-        const cardColor = detected.color;
-        const last4 = stmt.accountLast4 || '';
-        const cardKey = cardName;
-
-        const rowPayments = stmtTxs
-          .filter((t) => t.amountCents < 0 || t.type === 'PAYMENT' || isPaymentOrCreditDesc(t.rawDescription))
-          .reduce((sum, t) => sum + Math.abs(t.amountCents), 0);
-        const effectivePayments = rowPayments > 0 ? rowPayments : (stmt.payments || 0);
-
-        const rowPurchases = stmtTxs
-          .filter((t) => t.amountCents > 0 && !t.feeType && t.type !== 'PAYMENT' && !isPaymentOrCreditDesc(t.rawDescription))
-          .reduce((sum, t) => sum + t.amountCents, 0);
-        const effectivePurchases = rowPurchases > 0 ? rowPurchases : (stmt.purchases || 0);
-
-        if (!cardMap[cardKey]) {
-          cardMap[cardKey] = {
-            id: cardKey,
-            name: cardName,
-            last4: last4 || '',
-            color: cardColor,
-            spendCents: effectivePurchases,
-            paymentsCents: effectivePayments,
-            txCount: stmtTxs.length,
-            statementIds: new Set<string>([stmt.id])
-          };
-        } else {
-          cardMap[cardKey].statementIds.add(stmt.id);
-          if (!cardMap[cardKey].last4 && last4) {
-            cardMap[cardKey].last4 = last4;
-          }
-          cardMap[cardKey].spendCents += effectivePurchases;
-          cardMap[cardKey].paymentsCents += effectivePayments;
-          cardMap[cardKey].txCount += stmtTxs.length;
-        }
-      }
-
-      // Add any standalone transactions in scope not linked to statements
-      const standaloneTxs = currentStatementTxs.filter((t) => !t.statementId || t.statementId === 'manual_checking');
-      for (const tx of standaloneTxs) {
-        if (isCheckingTx(tx)) continue;
-        const info = getCardInfoForTx(tx);
-        const cardKey = info.cardName;
-        if (!cardMap[cardKey]) {
-          cardMap[cardKey] = {
-            id: cardKey,
-            name: info.cardName,
-            last4: info.last4 || '',
-            color: info.color,
-            spendCents: 0,
-            paymentsCents: 0,
-            txCount: 0,
-            statementIds: new Set<string>()
-          };
-        }
-        cardMap[cardKey].txCount++;
-        if (tx.amountCents < 0 || tx.type === 'PAYMENT' || isPaymentOrCreditDesc(tx.rawDescription)) {
-          cardMap[cardKey].paymentsCents += Math.abs(tx.amountCents);
-        } else if (!tx.feeType) {
-          cardMap[cardKey].spendCents += Math.abs(tx.amountCents);
-        }
-      }
-    } else {
-      // 2. In Single Month Combined view: Group by row items with statement fallback
-      for (const tx of currentStatementTxs) {
-        if (isCheckingTx(tx)) continue;
-
-        const isPayment = tx.amountCents < 0 || tx.type === 'PAYMENT' || isPaymentOrCreditDesc(tx.rawDescription);
-        const isFee = tx.feeType !== null && tx.feeType !== undefined;
-
-        const info = getCardInfoForTx(tx);
-        const cardName = info.cardName;
-        const last4 = info.last4;
-        const cardColor = info.color;
-        const cardKey = cardName;
-
-        if (!cardMap[cardKey]) {
-          cardMap[cardKey] = {
-            id: cardKey,
-            name: cardName,
-            last4: last4 || '',
-            color: cardColor,
-            spendCents: 0,
-            paymentsCents: 0,
-            txCount: 0,
-            statementIds: new Set<string>()
-          };
-        } else if (!cardMap[cardKey].last4 && last4) {
-          cardMap[cardKey].last4 = last4;
-        }
-
-        const cardEntry = cardMap[cardKey];
-        cardEntry.txCount++;
-        if (tx.statementId) cardEntry.statementIds.add(tx.statementId);
-
-        if (isPayment) {
-          cardEntry.paymentsCents += Math.abs(tx.amountCents);
-        } else if (!isFee) {
-          cardEntry.spendCents += Math.abs(tx.amountCents);
-        }
-      }
-
-      for (const stmt of statementsInScope) {
-        const stmtTxs = allTransactions.filter((t) => t.statementId === stmt.id);
-        const detected = detectCardName(stmt, stmtTxs);
+    for (const stmt of statementsInScope) {
+      const stmtTxs = allTransactions.filter((t) => t.statementId === stmt.id);
+      // Only apply statement summary fallback if this statement has 0 parsed transaction items
+      if (stmtTxs.length === 0) {
+        const detected = detectCardName(stmt, []);
         const cardName = detected.cardName;
         const cardColor = detected.color;
         const last4 = stmt.accountLast4 || '';
@@ -363,7 +260,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
             color: cardColor,
             spendCents: stmtPurchases,
             paymentsCents: stmtPayments,
-            txCount: stmtTxs.length,
+            txCount: 0,
             statementIds: new Set<string>([stmt.id])
           };
         } else {
@@ -371,12 +268,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
           if (!cardMap[cardKey].last4 && last4) {
             cardMap[cardKey].last4 = last4;
           }
-          if (cardMap[cardKey].paymentsCents === 0 && stmtPayments > 0) {
-            cardMap[cardKey].paymentsCents += stmtPayments;
-          }
-          if (cardMap[cardKey].spendCents === 0 && stmtPurchases > 0) {
-            cardMap[cardKey].spendCents += stmtPurchases;
-          }
+          cardMap[cardKey].spendCents += stmtPurchases;
+          cardMap[cardKey].paymentsCents += stmtPayments;
         }
       }
     }
