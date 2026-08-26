@@ -232,7 +232,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
       }
     }
 
-    // 2. Add summary fallback ONLY for statements in scope that have NO individual transaction rows
+    // 2. Reconcile with statement summary for statements whose row items do not include payment or purchase rows
     const statementsInScope = selectedStatementId.startsWith('MONTH:')
       ? statements.filter((s) => s.periodEnd && s.periodEnd.startsWith(selectedStatementId.replace('MONTH:', '')))
       : selectedStatementId.startsWith('YEAR:')
@@ -241,36 +241,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
 
     for (const stmt of statementsInScope) {
       const stmtTxs = allTransactions.filter((t) => t.statementId === stmt.id);
-      // Only apply statement summary fallback if this statement has 0 parsed transaction items
-      if (stmtTxs.length === 0) {
-        const detected = detectCardName(stmt, []);
-        const cardName = detected.cardName;
-        const cardColor = detected.color;
-        const last4 = stmt.accountLast4 || '';
-        const cardKey = cardName;
+      const detected = detectCardName(stmt, stmtTxs);
+      const cardName = detected.cardName;
+      const cardColor = detected.color;
+      const last4 = stmt.accountLast4 || '';
+      const cardKey = cardName;
 
-        const stmtPayments = stmt.payments || 0;
-        const stmtPurchases = stmt.purchases || 0;
-
-        if (!cardMap[cardKey]) {
-          cardMap[cardKey] = {
-            id: cardKey,
-            name: cardName,
-            last4: last4 || '',
-            color: cardColor,
-            spendCents: stmtPurchases,
-            paymentsCents: stmtPayments,
-            txCount: 0,
-            statementIds: new Set<string>([stmt.id])
-          };
-        } else {
-          cardMap[cardKey].statementIds.add(stmt.id);
-          if (!cardMap[cardKey].last4 && last4) {
-            cardMap[cardKey].last4 = last4;
-          }
-          cardMap[cardKey].spendCents += stmtPurchases;
-          cardMap[cardKey].paymentsCents += stmtPayments;
+      if (!cardMap[cardKey]) {
+        cardMap[cardKey] = {
+          id: cardKey,
+          name: cardName,
+          last4: last4 || '',
+          color: cardColor,
+          spendCents: 0,
+          paymentsCents: 0,
+          txCount: 0,
+          statementIds: new Set<string>([stmt.id])
+        };
+      } else {
+        cardMap[cardKey].statementIds.add(stmt.id);
+        if (!cardMap[cardKey].last4 && last4) {
+          cardMap[cardKey].last4 = last4;
         }
+      }
+
+      // If statement has no parsed purchase row items, use statement summary purchases
+      const stmtPurchasesInRows = stmtTxs
+        .filter((t) => t.amountCents > 0 && !t.feeType && t.type !== 'PAYMENT' && !isPaymentOrCreditDesc(t.rawDescription))
+        .reduce((sum, t) => sum + t.amountCents, 0);
+
+      if (stmtPurchasesInRows === 0 && stmt.purchases) {
+        cardMap[cardKey].spendCents += stmt.purchases;
+      }
+
+      // If statement has no parsed payment row items, use statement summary payments
+      const stmtPaymentsInRows = stmtTxs
+        .filter((t) => t.amountCents < 0 || t.type === 'PAYMENT' || isPaymentOrCreditDesc(t.rawDescription))
+        .reduce((sum, t) => sum + Math.abs(t.amountCents), 0);
+
+      if (stmtPaymentsInRows === 0 && stmt.payments) {
+        cardMap[cardKey].paymentsCents += stmt.payments;
       }
     }
 
